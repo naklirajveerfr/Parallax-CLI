@@ -1,0 +1,57 @@
+{
+  "name": "parallaxcli",
+  "version": "0.1.0",
+  "description": "ParallaxCLI - an open terminal coding agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/naklirajveerfr/Parallax-CLI.git"
+  },
+  "homepage": "https://github.com/naklirajveerfr/Parallax-CLI#readme",
+  "bugs": {
+    "url": "https://github.com/naklirajveerfr/Parallax-CLI/issues"
+  },
+  "author": "naklirajveerfr",
+  "type": "module",
+  "bin": {
+    "parallax": "dist/index.js",
+    "parallaxcli": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm test",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "cli",
+    "agent",
+    "ai",
+    "coding-agent",
+    "anthropic",
+    "openai"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "openai": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

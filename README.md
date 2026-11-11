@@ -1,13 +1,16 @@
 # ParallaxCLI
 
+[![npm](https://img.shields.io/npm/v/parallaxcli.svg)](https://www.npmjs.com/package/parallaxcli)
+[![CI](https://github.com/naklirajveerfr/Parallax-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/naklirajveerfr/Parallax-CLI/actions/workflows/ci.yml)
+
 A terminal coding agent — bring your own API key. ParallaxCLI reads your code, edits files, and runs commands from the terminal, asking for approval before anything destructive.
 
 30+ providers: Anthropic, OpenAI, Google Gemini, DeepSeek, xAI, Moonshot, MiniMax, Z.AI, Mistral, Cohere, AI21, OpenRouter, Groq, Cerebras, Fireworks, Together, Deep Infra, Baseten, NVIDIA, Hugging Face, Nebius, Azure, Vertex AI, Cloudflare, DigitalOcean, Snowflake, OCI, GitHub Copilot, and local Ollama / LM Studio.
 
 ```
 $ parallax
-  ParallaxCLI v0.1.0
-  anthropic · claude-sonnet-4-5 · ~/Lab/myproject
+  ParallaxCLI v0.2.1
+  anthropic · claude-sonnet-5-5 · ~/Lab/myproject
   /help for commands, /exit to quit
 
 › add a health check endpoint to the server
@@ -30,8 +33,6 @@ $ parallax
 
 Requires Node 22+.
 
-From npm (after publishing):
-
 ```bash
 npm install -g parallaxcli
 parallax --version
@@ -53,7 +54,7 @@ npm link          # puts `parallax` and `parallaxcli` on your PATH
 From a release tarball:
 
 ```bash
-npm install -g ./parallaxcli-0.1.0.tgz
+npm install -g ./parallaxcli-0.2.1.tgz
 ```
 
 The CLI installs two command names: `parallax` and `parallaxcli`. Use `parallaxcli` if another tool already owns `parallax`.

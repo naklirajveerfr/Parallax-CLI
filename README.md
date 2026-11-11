@@ -58,6 +58,8 @@ npm install -g ./parallaxcli-0.1.0.tgz
 
 The CLI installs two command names: `parallax` and `parallaxcli`. Use `parallaxcli` if another tool already owns `parallax`.
 
+Installing straight from git (`npm install -g github:...`) does not work yet: npm skips devDependencies for global git installs, so the TypeScript build never runs. Clone and link as shown above, or use the npm package / release tarball.
+
 Or run the build directly without linking:
 
 ```bash

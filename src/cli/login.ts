@@ -4,12 +4,11 @@ import {
   isProvider,
   loadConfig,
   maskKey,
-  PROVIDER_LABELS,
   resolveModel,
   saveConfig,
   type ParallaxConfig,
-  type ProviderId,
 } from '../config.js';
+import { getPreset, isAvailable } from '../providers/registry.js';
 import { promptSecret } from '../ui/input.js';
 
 export async function runLogin(options: {
@@ -19,36 +18,50 @@ export async function runLogin(options: {
   const config: ParallaxConfig = await loadConfig();
 
   const providerName = options.provider ?? config.provider;
-  if (!isProvider(providerName) || providerName === 'mock') {
-    throw new Error(`Cannot log in to "${providerName}". Use anthropic, openai, or openrouter.`);
+  if (!isProvider(providerName)) {
+    throw new Error(`Unknown provider "${providerName}". Run \`parallax providers\` to list them.`);
   }
-  const provider = providerName as ProviderId;
+
+  const preset = getPreset(providerName);
+  if (!preset) throw new Error(`Unknown provider "${providerName}".`);
+
+  if (!isAvailable(preset)) {
+    throw new Error(`${preset.label} is not supported yet. ${preset.notes ?? ''}`);
+  }
+  if (preset.kind === 'mock') {
+    throw new Error('The mock provider is offline and needs no key. Try `parallax --provider mock`.');
+  }
+  if (preset.auth === 'none') {
+    throw new Error(`${preset.label} runs locally and needs no API key. Try \`parallax --provider ${preset.id}\`.`);
+  }
+  if (preset.auth === 'custom') {
+    throw new Error(
+      `${preset.label} does not use a stored key. ${preset.notes ?? 'Configure its environment variables instead.'}`,
+    );
+  }
+
+  const keyLabel = preset.id === 'copilot' ? 'GitHub token' : 'API key';
+  const envHint = preset.envKeys.length > 0 ? preset.envKeys.join(' or ') : 'its environment variables';
 
   process.stdout.write(`${c.bold('ParallaxCLI login')}\n`);
-  process.stdout.write(`  provider  ${provider} ${c.dim(`(${PROVIDER_LABELS[provider]})`)}\n`);
+  process.stdout.write(`  provider  ${c.bold(preset.id)} ${c.dim(`(${preset.label})`)}\n`);
+  process.stdout.write(`  model     ${resolveModel(config, preset.id)}\n`);
   process.stdout.write(
-    c.dim(`  The key is stored in ${configPath()} with 0600 permissions.\n`),
+    c.dim(`  Stored in ${configPath()} with 0600 permissions. ${envHint} also works.\n`),
   );
-  if (provider === 'openai') {
-    process.stdout.write(
-      c.dim('  Works with OpenAI, Groq, Together, and local Ollama/LM Studio.\n'),
-    );
-  }
-  if (provider === 'openrouter') {
-    process.stdout.write(
-      c.dim(`  One key for hundreds of models. Default model: ${resolveModel(config, provider)}.\n`),
-    );
-    process.stdout.write(c.dim('  Switch models with `/model anthropic/claude-opus-4.1` in-session.\n'));
+  if (preset.notes) process.stdout.write(c.dim(`  ${preset.notes}\n`));
+  for (const key of preset.requiredEnv ?? []) {
+    if (!process.env[key]) process.stdout.write(c.yellow(`  Also set ${key} in your environment.\n`));
   }
 
-  const key = options.apiKey?.trim() || (await promptSecret('  API key: '));
-  if (!key) throw new Error('No API key entered.');
+  const key = options.apiKey?.trim() || (await promptSecret(`  ${keyLabel}: `));
+  if (!key) throw new Error(`No ${keyLabel.toLowerCase()} entered.`);
 
-  config.provider = provider;
-  config.apiKeys[provider] = key;
+  config.provider = preset.id;
+  config.apiKeys[preset.id] = key;
   await saveConfig(config);
 
-  process.stdout.write(`\n${c.green('✓')} Stored ${maskKey(key)} for ${provider}.\n`);
+  process.stdout.write(`\n${c.green('✓')} Stored ${maskKey(key)} for ${preset.label}.\n`);
   process.stdout.write(`${c.dim(`  ${configPath()}`)}\n`);
   process.stdout.write(`${c.dim('  Try: ')}parallax -p "say hello"\n`);
 }

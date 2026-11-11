@@ -10,28 +10,42 @@ import {
   resolveModel,
   saveConfig,
   PROVIDER_LABELS,
-  PROVIDERS,
   type ParallaxConfig,
 } from '../config.js';
+import { getPreset, isAvailable } from '../providers/registry.js';
 import { promptSecret } from '../ui/input.js';
 
 export async function showConfig(config: ParallaxConfig): Promise<void> {
   const provider = config.provider;
+  const preset = getPreset(provider);
   const key = resolveApiKey(config, provider);
   const source = key ? apiKeySource(provider) : 'none';
   const baseUrl = resolveBaseUrl(config, provider);
 
   const rows: [string, string][] = [
     ['file', configPath()],
-    ['provider', `${provider} ${c.dim(`(${PROVIDER_LABELS[provider]})`)}`],
+    ['provider', `${provider} ${c.dim(`(${PROVIDER_LABELS[provider] ?? 'unknown'})`)}`],
     ['model', resolveModel(config, provider)],
     ['base url', baseUrl ?? c.dim('(provider default)')],
-    ['api key', key ? `${maskKey(key)} ${c.dim(`(${source})`)}` : c.yellow('(not set)')],
+    [
+      'api key',
+      preset?.auth === 'none'
+        ? c.dim('(not needed)')
+        : key
+          ? `${maskKey(key)} ${c.dim(`(${source})`)}`
+          : c.yellow('(not set)'),
+    ],
   ];
 
   process.stdout.write(`${c.bold('ParallaxCLI configuration')}\n`);
   for (const [label, value] of rows) {
     process.stdout.write(`  ${label.padEnd(9)} ${value}\n`);
+  }
+  if (preset && !isAvailable(preset)) {
+    process.stdout.write(`${c.red('  This provider is not supported yet.')} ${preset.notes ?? ''}\n`);
+  }
+  for (const env of preset?.requiredEnv ?? []) {
+    if (!process.env[env]) process.stdout.write(`${c.yellow(`  Missing environment variable ${env}.`)}\n`);
   }
   if (key && source === 'env') {
     process.stdout.write(`${c.dim('  Environment variables take precedence over the stored key.')}\n`);
@@ -87,7 +101,7 @@ export async function runConfigCommand(args: string[]): Promise<void> {
     switch (key) {
       case 'provider': {
         const name = value.trim();
-        if (!isProvider(name)) throw new Error(`Unknown provider "${name}". Use ${PROVIDERS.join(', ')}.`);
+        if (!isProvider(name)) throw new Error(`Unknown provider "${name}". Run \`parallax providers\` for the list.`);
         config.provider = name;
         break;
       }

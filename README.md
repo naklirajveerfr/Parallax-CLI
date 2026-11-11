@@ -2,7 +2,7 @@
 
 A terminal coding agent — bring your own API key. ParallaxCLI reads your code, edits files, and runs commands from the terminal, asking for approval before anything destructive.
 
-Works with Anthropic and any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Together, local Ollama / LM Studio).
+30+ providers: Anthropic, OpenAI, Google Gemini, DeepSeek, xAI, Moonshot, MiniMax, Z.AI, Mistral, Cohere, AI21, OpenRouter, Groq, Cerebras, Fireworks, Together, Deep Infra, Baseten, NVIDIA, Hugging Face, Nebius, Azure, Vertex AI, Cloudflare, DigitalOcean, Snowflake, OCI, GitHub Copilot, and local Ollama / LM Studio.
 
 ```
 $ parallax
@@ -74,30 +74,52 @@ parallax                             # start an interactive session
 parallax -p "explain this repo"      # one-shot, for scripts
 ```
 
-Keys are stored in `~/.config/parallax/config.json` with `0600` permissions. Environment variables take precedence, so `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `PARALLAX_API_KEY` work without any stored config.
+Keys are stored in `~/.config/parallax/config.json` with `0600` permissions. Environment variables take precedence, so `PARALLAX_API_KEY` or any provider-specific key (`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, …) works without stored config. `parallax providers` shows the variable for each provider.
 
 ## Providers
 
+Run `parallax providers` for the live list, default models, and required env vars. 30+ providers are available; most are OpenAI-compatible, so they need only a key.
+
+**Frontier labs** — `anthropic`, `openai`, `google`, `deepseek`, `xai`, `moonshot`, `minimax`, `zai`, `mistral`, `cohere`, `ai21`, plus `openrouter`.
+
+**Inference hosts** — `groq`, `cerebras`, `fireworks`, `together`, `deepinfra`, `baseten`, `nvidia`, `huggingface`, `nebius`.
+
 ```bash
-# Anthropic
-parallax login --provider anthropic
-
-# OpenAI
-parallax login --provider openai
-
-# OpenRouter (one key, many models)
-parallax login --provider openrouter
-# default model: anthropic/claude-sonnet-4.5
-# in-session: /model openai/gpt-4.1  or  /model google/gemini-2.5-pro
-
-# Local Ollama (no key needed)
-parallax --provider openai --base-url http://localhost:11434/v1 --model llama3.1
-
-# Offline demo, no key at all
-parallax --provider mock
+parallax login --provider groq
+parallax login --provider deepseek
+parallax login --provider openrouter   # one key, hundreds of models
 ```
 
-Switch mid-session with `/provider openai` or `/model gpt-4.1-mini`.
+**Cloud and enterprise**
+
+| Provider | Extra setup |
+| --- | --- |
+| `azure` | `AZURE_RESOURCE_NAME` or `AZURE_OPENAI_ENDPOINT`; key or `az login` for Entra ID |
+| `vertex` | `GOOGLE_VERTEX_PROJECT` + gcloud ADC (or `GOOGLE_VERTEX_ACCESS_TOKEN`) |
+| `cloudflare` | `CLOUDFLARE_ACCOUNT_ID` |
+| `cloudflare-gateway` | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_GATEWAY_ID` |
+| `digitalocean` | `DIGITALOCEAN_ACCESS_TOKEN` or a model access key |
+| `snowflake` | `SNOWFLAKE_ACCOUNT` + `SNOWFLAKE_CORTEX_PAT` |
+| `oci` | `OCI_GENAI_API_KEY` |
+| `copilot` | `GITHUB_TOKEN` (try `gh auth token`); experimental, uses GitHub's internal Copilot API |
+
+```bash
+parallax login --provider azure --api-key "$AZURE_OPENAI_API_KEY"
+parallax login --provider copilot --api-key "$(gh auth token)"
+parallax --provider vertex --model gemini-4-carbon
+```
+
+**Local and offline**
+
+```bash
+parallax --provider ollama --model qwen3-coder
+parallax --provider lmstudio
+parallax --provider mock          # UI demo, no key
+```
+
+**Not supported yet** — `bedrock` (needs AWS SigV4/Converse), `sap` (OAuth + deployment URL), `gitlab` (proprietary Duo API), `chatgpt` (subscriptions have no public API). For any other OpenAI-compatible endpoint, use `--provider openai --base-url <url> --model <id>`.
+
+Default model ids come from the [Models.dev](https://models.dev) directory and can drift; override per provider with `--model` or `/model` in-session. Switch providers mid-session with `/provider groq`.
 
 ## Usage
 
@@ -106,6 +128,7 @@ parallax                       Interactive session
 parallax "prompt"              One-shot
 parallax -p "prompt"           One-shot (script friendly)
 parallax login                 Store a key
+parallax providers             List providers, models, and auth
 parallax config                Show config
 parallax config set <k> <v>    provider | model | base-url | api-key
 parallax config unset <k>      Clear a setting
@@ -124,6 +147,7 @@ Options: `--provider`, `--model`, `--base-url`, `--api-key`, `--cwd`, `--yes`, `
 | `/provider [name]` | Show or switch provider |
 | `/tools` | List tools |
 | `/config` | Show saved config |
+| `/providers` | List providers and auth |
 | `/cost` | Session token usage |
 | `/exit` | Quit |
 

@@ -13,6 +13,7 @@ import { VERSION } from '../version.js';
 import { parseArgs, type CliOptions } from './args.js';
 import { runConfigCommand } from './config-cmd.js';
 import { runLogin } from './login.js';
+import { runProvidersCommand } from './providers-cmd.js';
 import { runRepl } from './repl.js';
 
 const HELP = `
@@ -26,6 +27,7 @@ ${c.bold('Usage')}
   parallax config                Show configuration
 
 ${c.bold('Commands')}
+  parallax providers                List all providers and their auth
   parallax config set <key> <value>    provider | model | base-url | api-key
   parallax config unset <key>          Clear a setting for the current provider
   parallax config get <key>            Print a value
@@ -33,9 +35,9 @@ ${c.bold('Commands')}
 
 ${c.bold('Options')}
   -p, --print <text>        Run a single prompt non-interactively
-      --provider <name>     anthropic | openai | openrouter | mock
+      --provider <name>     Provider id (run: parallax providers)
       --model <name>        Model id override
-      --base-url <url>      OpenAI-compatible endpoint (OpenRouter, Ollama, ...)
+      --base-url <url>      OpenAI-compatible endpoint (proxy, gateway, local)
       --api-key <key>       Key for this run only (prefer login/env)
       --cwd <dir>           Workspace directory (default: current directory)
   -y, --yes                 Auto-approve tool actions (use with care)
@@ -47,16 +49,21 @@ ${c.bold('Options')}
 
 ${c.bold('Environment')}
   PARALLAX_API_KEY              Key override for any provider
-  ANTHROPIC_API_KEY             Anthropic key
-  OPENAI_API_KEY                OpenAI-compatible key
-  OPENROUTER_API_KEY            OpenRouter key
+  ANTHROPIC_API_KEY             Anthropic
+  OPENAI_API_KEY                OpenAI
+  GEMINI_API_KEY                Google Gemini
+  OPENROUTER_API_KEY            OpenRouter
+  ...                           run: parallax providers, for the full list
   PARALLAX_PROVIDER, PARALLAX_MODEL, PARALLAX_BASE_URL
   NO_COLOR                      Disable colors
 
 ${c.bold('Examples')}
+  parallax providers
   parallax login --provider anthropic
+  parallax login --provider groq
   parallax login --provider openrouter
   parallax -p "explain this repo" --cwd ~/Lab/myproject
+  parallax --provider ollama --model qwen3-coder
   parallax --provider openai --base-url http://localhost:11434/v1 --model llama3.1
   parallax --provider mock        # offline UI demo, no key needed
 `;
@@ -87,6 +94,9 @@ export async function main(argv: string[]): Promise<void> {
         return;
       case 'config':
         await runConfigCommand(options.configArgs);
+        return;
+      case 'providers':
+        runProvidersCommand();
         return;
       default:
         await runChat(options, await loadConfig());

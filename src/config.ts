@@ -1,45 +1,37 @@
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getPreset, PRESETS } from './providers/registry.js';
 
-export type ProviderId = 'anthropic' | 'openai' | 'openrouter' | 'mock';
+export type ProviderId = string;
 
-export const PROVIDERS: ProviderId[] = ['anthropic', 'openai', 'openrouter', 'mock'];
+export const PROVIDERS: string[] = PRESETS.map((preset) => preset.id);
 
 export interface ParallaxConfig {
   provider: ProviderId;
   /** Per-provider model overrides. */
-  models: Partial<Record<ProviderId, string>>;
-  /** Per-provider API base URLs (for proxies, OpenRouter, Ollama, ...). */
-  baseUrls: Partial<Record<ProviderId, string>>;
-  /** Per-provider API keys. Prefer env vars in shared machines. */
-  apiKeys: Partial<Record<ProviderId, string>>;
+  models: Record<string, string>;
+  /** Per-provider API base URLs (for proxies, gateways, self-hosted instances). */
+  baseUrls: Record<string, string>;
+  /** Per-provider API keys. Prefer env vars on shared machines. */
+  apiKeys: Record<string, string>;
 }
 
-export const DEFAULT_MODELS: Record<ProviderId, string> = {
-  anthropic: 'claude-sonnet-4-5',
-  openai: 'gpt-4.1',
-  openrouter: 'anthropic/claude-sonnet-4.5',
-  mock: 'mock-1',
-};
+export const DEFAULT_MODELS: Record<string, string> = Object.fromEntries(
+  PRESETS.map((preset) => [preset.id, preset.defaultModel]),
+);
 
-export const DEFAULT_BASE_URLS: Partial<Record<ProviderId, string>> = {
-  openrouter: 'https://openrouter.ai/api/v1',
-};
+export const DEFAULT_BASE_URLS: Record<string, string> = Object.fromEntries(
+  PRESETS.filter((preset) => preset.baseUrl).map((preset) => [preset.id, preset.baseUrl as string]),
+);
 
-export const PROVIDER_ENV_KEYS: Record<ProviderId, string[]> = {
-  anthropic: ['ANTHROPIC_API_KEY'],
-  openai: ['OPENAI_API_KEY'],
-  openrouter: ['OPENROUTER_API_KEY'],
-  mock: [],
-};
+export const PROVIDER_ENV_KEYS: Record<string, string[]> = Object.fromEntries(
+  PRESETS.map((preset) => [preset.id, preset.envKeys]),
+);
 
-export const PROVIDER_LABELS: Record<ProviderId, string> = {
-  anthropic: 'Anthropic',
-  openai: 'OpenAI-compatible',
-  openrouter: 'OpenRouter',
-  mock: 'Mock (offline demo)',
-};
+export const PROVIDER_LABELS: Record<string, string> = Object.fromEntries(
+  PRESETS.map((preset) => [preset.id, preset.label]),
+);
 
 export function configDir(): string {
   return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'parallax');
@@ -88,22 +80,23 @@ export async function saveConfig(config: ParallaxConfig): Promise<void> {
 }
 
 export function isProvider(value: string): value is ProviderId {
-  return (PROVIDERS as string[]).includes(value);
+  return getPreset(value) !== undefined;
 }
 
 export function resolveModel(config: ParallaxConfig, provider: ProviderId): string {
-  return config.models[provider] ?? DEFAULT_MODELS[provider];
+  return config.models[provider] ?? getPreset(provider)?.defaultModel ?? '';
 }
 
 export function resolveBaseUrl(config: ParallaxConfig, provider: ProviderId): string | undefined {
-  return config.baseUrls[provider] ?? DEFAULT_BASE_URLS[provider];
+  return config.baseUrls[provider] ?? getPreset(provider)?.baseUrl;
 }
 
-/** Precedence: PARALLAX_API_KEY, then provider-specific env var, then stored key. */
+/** Precedence: PARALLAX_API_KEY, then provider-specific env vars, then stored key. */
 export function resolveApiKey(config: ParallaxConfig, provider: ProviderId): string | undefined {
-  if (provider === 'mock') return undefined;
+  const preset = getPreset(provider);
+  if (preset?.kind === 'mock' || preset?.auth === 'none') return undefined;
   if (process.env.PARALLAX_API_KEY) return process.env.PARALLAX_API_KEY;
-  for (const key of PROVIDER_ENV_KEYS[provider]) {
+  for (const key of PROVIDER_ENV_KEYS[provider] ?? []) {
     const value = process.env[key];
     if (value) return value;
   }
@@ -117,8 +110,9 @@ export function maskKey(key: string | undefined): string {
 }
 
 export function apiKeySource(provider: ProviderId): 'env' | 'config' | 'none' {
-  if (provider === 'mock') return 'none';
+  const preset = getPreset(provider);
+  if (!preset || preset.kind === 'mock' || preset.auth === 'none') return 'none';
   if (process.env.PARALLAX_API_KEY) return 'env';
-  if (PROVIDER_ENV_KEYS[provider].some((key) => Boolean(process.env[key]))) return 'env';
+  if ((PROVIDER_ENV_KEYS[provider] ?? []).some((key) => Boolean(process.env[key]))) return 'env';
   return 'config';
 }

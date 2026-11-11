@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { parseArgs } from '../dist/cli/args.js';
 import { defaultConfig, resolveBaseUrl, resolveModel } from '../dist/config.js';
-import { createProvider, resolveProviderSettings } from '../dist/providers/index.js';
+import { createProvider, interpolateBaseUrl, PRESETS, resolveProviderSettings } from '../dist/providers/index.js';
 import { MockProvider } from '../dist/providers/mock.js';
 import { runTurn } from '../dist/agent/agent.js';
 import { Approvals, tools } from '../dist/tools/index.js';
@@ -127,14 +127,72 @@ test('bash runs in the workspace and reports exit codes', async () => {
 
 test('openrouter is a first-class provider', () => {
   const config = defaultConfig();
-  assert.equal(resolveModel(config, 'openrouter'), 'anthropic/claude-sonnet-4.5');
+  assert.equal(resolveModel(config, 'openrouter'), 'anthropic/claude-sonnet-5.5');
   assert.equal(resolveBaseUrl(config, 'openrouter'), 'https://openrouter.ai/api/v1');
 
   const settings = resolveProviderSettings(config, { provider: 'openrouter', apiKey: 'sk-or-test' });
   assert.equal(settings.provider, 'openrouter');
-  assert.equal(settings.model, 'anthropic/claude-sonnet-4.5');
+  assert.equal(settings.model, 'anthropic/claude-sonnet-5.5');
   assert.equal(settings.baseUrl, 'https://openrouter.ai/api/v1');
   assert.equal(settings.apiKey, 'sk-or-test');
+});
+
+test('registry presets are unique and well formed', () => {
+  const ids = new Set();
+  for (const preset of PRESETS) {
+    assert.equal(ids.has(preset.id), false, `duplicate id ${preset.id}`);
+    ids.add(preset.id);
+    assert.ok(preset.label.length > 0, `${preset.id} has a label`);
+    if (preset.kind === 'unsupported') continue;
+    assert.ok(preset.defaultModel.length > 0, `${preset.id} has a default model`);
+    if (preset.kind === 'openai' && preset.id !== 'openai') {
+      assert.ok(preset.baseUrl, `${preset.id} needs a base URL`);
+    }
+  }
+  assert.ok(ids.has('anthropic') && ids.has('groq') && ids.has('bedrock'));
+});
+
+test('openai-compatible presets resolve their endpoints', () => {
+  const config = defaultConfig();
+  const cases = [
+    ['deepseek', 'https://api.deepseek.com'],
+    ['groq', 'https://api.groq.com/openai/v1'],
+    ['moonshot', 'https://api.moonshot.ai/v1'],
+    ['google', 'https://generativelanguage.googleapis.com/v1beta/openai'],
+    ['together', 'https://api.together.xyz/v1'],
+  ];
+  for (const [id, expected] of cases) {
+    const settings = resolveProviderSettings(config, { provider: id, apiKey: 'test' });
+    assert.equal(settings.baseUrl, expected, `${id} base URL`);
+    assert.ok(settings.model.length > 0, `${id} model`);
+  }
+});
+
+test('templated base URLs expand env vars or fail clearly', () => {
+  const config = defaultConfig();
+  const previous = process.env.SNOWFLAKE_ACCOUNT;
+  try {
+    delete process.env.SNOWFLAKE_ACCOUNT;
+    const settings = resolveProviderSettings(config, { provider: 'snowflake', apiKey: 'test' });
+    assert.throws(() => createProvider(settings), /Missing environment variable SNOWFLAKE_ACCOUNT/);
+
+    process.env.SNOWFLAKE_ACCOUNT = 'acme';
+    assert.equal(
+      interpolateBaseUrl(resolveBaseUrl(config, 'snowflake')),
+      'https://acme.snowflakecomputing.com/api/v2/cortex/v1',
+    );
+  } finally {
+    if (previous === undefined) delete process.env.SNOWFLAKE_ACCOUNT;
+    else process.env.SNOWFLAKE_ACCOUNT = previous;
+  }
+});
+
+test('unsupported providers explain what is missing', () => {
+  const config = defaultConfig();
+  for (const id of ['bedrock', 'sap', 'gitlab', 'chatgpt']) {
+    const settings = resolveProviderSettings(config, { provider: id });
+    assert.throws(() => createProvider(settings), /not supported yet/);
+  }
 });
 
 test('openrouter key can come from OPENROUTER_API_KEY and is required', () => {

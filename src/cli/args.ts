@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-export type Command = 'chat' | 'login' | 'config' | 'help' | 'version';
+export type Command = 'chat' | 'login' | 'config' | 'providers' | 'help' | 'version';
 
 export interface CliOptions {
   command: Command;
@@ -123,7 +123,7 @@ export function parseArgs(argv: string[]): CliOptions {
       throw new Error(`Unknown option: ${arg}. Run \`parallax --help\`.`);
     }
 
-    if (!commandSet && (arg === 'login' || arg === 'config' || arg === 'help' || arg === 'version')) {
+    if (!commandSet && (arg === 'login' || arg === 'config' || arg === 'providers' || arg === 'help' || arg === 'version')) {
       options.command = arg;
       commandSet = true;
       continue;

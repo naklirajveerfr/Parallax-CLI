@@ -18,6 +18,7 @@ import type { Message, Provider } from '../providers/types.js';
 import { userText } from '../providers/types.js';
 import { Approvals, tools } from '../tools/index.js';
 import { showConfig } from './config-cmd.js';
+import { runProvidersCommand } from './providers-cmd.js';
 import { Renderer } from '../ui/render.js';
 import { c } from '../util/colors.js';
 import { describeError } from '../util/errors.js';
@@ -40,7 +41,8 @@ const HELP = `Commands
   /exit, /quit       leave ParallaxCLI
   /clear             forget the conversation
   /model [name]      show or switch the model
-  /provider [name]   show or switch provider (anthropic, openai, openrouter, mock)
+  /provider [name]   show or switch provider (see /providers)
+  /providers         list all providers and their auth
   /config            show saved configuration
   /tools             list available tools
   /cost              show session token usage
@@ -136,7 +138,7 @@ export async function runRepl(options: ReplOptions): Promise<void> {
 
   const switchProvider = async (name: string): Promise<void> => {
     if (!isProvider(name)) {
-      render.warn(`Unknown provider "${name}". Use anthropic, openai, openrouter, or mock.`);
+      render.warn(`Unknown provider "${name}". Run /providers for the list.`);
       return;
     }
     try {
@@ -200,6 +202,9 @@ export async function runRepl(options: ReplOptions): Promise<void> {
         await switchProvider(argument);
         return 'continue';
       }
+      case 'providers':
+        runProvidersCommand();
+        return 'continue';
       case 'config':
         await showConfig(config);
         return 'continue';

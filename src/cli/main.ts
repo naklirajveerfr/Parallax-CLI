@@ -33,7 +33,7 @@ ${c.bold('Commands')}
 
 ${c.bold('Options')}
   -p, --print <text>        Run a single prompt non-interactively
-      --provider <name>     anthropic | openai | mock
+      --provider <name>     anthropic | openai | openrouter | mock
       --model <name>        Model id override
       --base-url <url>      OpenAI-compatible endpoint (OpenRouter, Ollama, ...)
       --api-key <key>       Key for this run only (prefer login/env)
@@ -49,11 +49,13 @@ ${c.bold('Environment')}
   PARALLAX_API_KEY              Key override for any provider
   ANTHROPIC_API_KEY             Anthropic key
   OPENAI_API_KEY                OpenAI-compatible key
+  OPENROUTER_API_KEY            OpenRouter key
   PARALLAX_PROVIDER, PARALLAX_MODEL, PARALLAX_BASE_URL
   NO_COLOR                      Disable colors
 
 ${c.bold('Examples')}
   parallax login --provider anthropic
+  parallax login --provider openrouter
   parallax -p "explain this repo" --cwd ~/Lab/myproject
   parallax --provider openai --base-url http://localhost:11434/v1 --model llama3.1
   parallax --provider mock        # offline UI demo, no key needed

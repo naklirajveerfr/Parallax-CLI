@@ -5,6 +5,7 @@ import {
   loadConfig,
   maskKey,
   PROVIDER_LABELS,
+  resolveModel,
   saveConfig,
   type ParallaxConfig,
   type ProviderId,
@@ -19,7 +20,7 @@ export async function runLogin(options: {
 
   const providerName = options.provider ?? config.provider;
   if (!isProvider(providerName) || providerName === 'mock') {
-    throw new Error(`Cannot log in to "${providerName}". Use anthropic or openai.`);
+    throw new Error(`Cannot log in to "${providerName}". Use anthropic, openai, or openrouter.`);
   }
   const provider = providerName as ProviderId;
 
@@ -30,8 +31,14 @@ export async function runLogin(options: {
   );
   if (provider === 'openai') {
     process.stdout.write(
-      c.dim('  Works with OpenAI, OpenRouter, Groq, Together, and local Ollama/LM Studio.\n'),
+      c.dim('  Works with OpenAI, Groq, Together, and local Ollama/LM Studio.\n'),
     );
+  }
+  if (provider === 'openrouter') {
+    process.stdout.write(
+      c.dim(`  One key for hundreds of models. Default model: ${resolveModel(config, provider)}.\n`),
+    );
+    process.stdout.write(c.dim('  Switch models with `/model anthropic/claude-opus-4.1` in-session.\n'));
   }
 
   const key = options.apiKey?.trim() || (await promptSecret('  API key: '));

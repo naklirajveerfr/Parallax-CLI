@@ -74,7 +74,7 @@ parallax                             # start an interactive session
 parallax -p "explain this repo"      # one-shot, for scripts
 ```
 
-Keys are stored in `~/.config/parallax/config.json` with `0600` permissions. Environment variables take precedence, so `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `PARALLAX_API_KEY` work without any stored config.
+Keys are stored in `~/.config/parallax/config.json` with `0600` permissions. Environment variables take precedence, so `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `PARALLAX_API_KEY` work without any stored config.
 
 ## Providers
 
@@ -85,9 +85,10 @@ parallax login --provider anthropic
 # OpenAI
 parallax login --provider openai
 
-# OpenRouter
-parallax login --provider openai --api-key "$OPENROUTER_API_KEY"
-parallax config set base-url https://openrouter.ai/api/v1
+# OpenRouter (one key, many models)
+parallax login --provider openrouter
+# default model: anthropic/claude-sonnet-4.5
+# in-session: /model openai/gpt-4.1  or  /model google/gemini-2.5-pro
 
 # Local Ollama (no key needed)
 parallax --provider openai --base-url http://localhost:11434/v1 --model llama3.1
@@ -154,10 +155,10 @@ Notes:
 
 ```json
 {
-  "provider": "anthropic",
-  "models": { "anthropic": "claude-sonnet-4-5" },
+  "provider": "openrouter",
+  "models": { "openrouter": "anthropic/claude-sonnet-4.5" },
   "baseUrls": { "openai": "https://openrouter.ai/api/v1" },
-  "apiKeys": { "openai": "sk-or-..." }
+  "apiKeys": { "openrouter": "sk-or-..." }
 }
 ```
 

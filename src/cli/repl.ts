@@ -40,7 +40,7 @@ const HELP = `Commands
   /exit, /quit       leave ParallaxCLI
   /clear             forget the conversation
   /model [name]      show or switch the model
-  /provider [name]   show or switch provider (anthropic, openai, mock)
+  /provider [name]   show or switch provider (anthropic, openai, openrouter, mock)
   /config            show saved configuration
   /tools             list available tools
   /cost              show session token usage
@@ -136,7 +136,7 @@ export async function runRepl(options: ReplOptions): Promise<void> {
 
   const switchProvider = async (name: string): Promise<void> => {
     if (!isProvider(name)) {
-      render.warn(`Unknown provider "${name}". Use anthropic, openai, or mock.`);
+      render.warn(`Unknown provider "${name}". Use anthropic, openai, openrouter, or mock.`);
       return;
     }
     try {

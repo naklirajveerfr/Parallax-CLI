@@ -2,9 +2,9 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export type ProviderId = 'anthropic' | 'openai' | 'mock';
+export type ProviderId = 'anthropic' | 'openai' | 'openrouter' | 'mock';
 
-export const PROVIDERS: ProviderId[] = ['anthropic', 'openai', 'mock'];
+export const PROVIDERS: ProviderId[] = ['anthropic', 'openai', 'openrouter', 'mock'];
 
 export interface ParallaxConfig {
   provider: ProviderId;
@@ -19,18 +19,25 @@ export interface ParallaxConfig {
 export const DEFAULT_MODELS: Record<ProviderId, string> = {
   anthropic: 'claude-sonnet-4-5',
   openai: 'gpt-4.1',
+  openrouter: 'anthropic/claude-sonnet-4.5',
   mock: 'mock-1',
+};
+
+export const DEFAULT_BASE_URLS: Partial<Record<ProviderId, string>> = {
+  openrouter: 'https://openrouter.ai/api/v1',
 };
 
 export const PROVIDER_ENV_KEYS: Record<ProviderId, string[]> = {
   anthropic: ['ANTHROPIC_API_KEY'],
   openai: ['OPENAI_API_KEY'],
+  openrouter: ['OPENROUTER_API_KEY'],
   mock: [],
 };
 
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI-compatible',
+  openrouter: 'OpenRouter',
   mock: 'Mock (offline demo)',
 };
 
@@ -89,7 +96,7 @@ export function resolveModel(config: ParallaxConfig, provider: ProviderId): stri
 }
 
 export function resolveBaseUrl(config: ParallaxConfig, provider: ProviderId): string | undefined {
-  return config.baseUrls[provider];
+  return config.baseUrls[provider] ?? DEFAULT_BASE_URLS[provider];
 }
 
 /** Precedence: PARALLAX_API_KEY, then provider-specific env var, then stored key. */

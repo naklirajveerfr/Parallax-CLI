@@ -10,6 +10,7 @@ import {
   resolveModel,
   saveConfig,
   PROVIDER_LABELS,
+  PROVIDERS,
   type ParallaxConfig,
 } from '../config.js';
 import { promptSecret } from '../ui/input.js';
@@ -86,7 +87,7 @@ export async function runConfigCommand(args: string[]): Promise<void> {
     switch (key) {
       case 'provider': {
         const name = value.trim();
-        if (!isProvider(name)) throw new Error(`Unknown provider "${name}". Use anthropic, openai, or mock.`);
+        if (!isProvider(name)) throw new Error(`Unknown provider "${name}". Use ${PROVIDERS.join(', ')}.`);
         config.provider = name;
         break;
       }

@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parseArgs } from '../dist/cli/args.js';
+import { defaultConfig, resolveBaseUrl, resolveModel } from '../dist/config.js';
+import { createProvider, resolveProviderSettings } from '../dist/providers/index.js';
 import { MockProvider } from '../dist/providers/mock.js';
 import { runTurn } from '../dist/agent/agent.js';
 import { Approvals, tools } from '../dist/tools/index.js';
@@ -121,6 +123,31 @@ test('bash runs in the workspace and reports exit codes', async () => {
   const failed = await getTool('bash').run({ command: 'exit 7' }, context);
   assert.equal(failed.isError, true);
   assert.match(failed.content, /Exit code: 7/);
+});
+
+test('openrouter is a first-class provider', () => {
+  const config = defaultConfig();
+  assert.equal(resolveModel(config, 'openrouter'), 'anthropic/claude-sonnet-4.5');
+  assert.equal(resolveBaseUrl(config, 'openrouter'), 'https://openrouter.ai/api/v1');
+
+  const settings = resolveProviderSettings(config, { provider: 'openrouter', apiKey: 'sk-or-test' });
+  assert.equal(settings.provider, 'openrouter');
+  assert.equal(settings.model, 'anthropic/claude-sonnet-4.5');
+  assert.equal(settings.baseUrl, 'https://openrouter.ai/api/v1');
+  assert.equal(settings.apiKey, 'sk-or-test');
+});
+
+test('openrouter key can come from OPENROUTER_API_KEY and is required', () => {
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'sk-or-env';
+  try {
+    const settings = resolveProviderSettings(defaultConfig(), { provider: 'openrouter' });
+    assert.equal(settings.apiKey, 'sk-or-env');
+    assert.doesNotThrow(() => createProvider(settings));
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+  }
 });
 
 test('agent loop executes tools and returns a final answer', async () => {

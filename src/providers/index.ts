@@ -3,6 +3,7 @@ import {
   resolveBaseUrl,
   resolveModel,
   isProvider,
+  PROVIDERS,
   type ParallaxConfig,
   type ProviderId,
 } from '../config.js';
@@ -34,7 +35,7 @@ export function resolveProviderSettings(config: ParallaxConfig, flags: ProviderF
   if (!isProvider(providerName)) {
     throw new ParallaxError(
       `Unknown provider "${providerName}".`,
-      'Use one of: anthropic, openai, mock.',
+      `Use one of: ${PROVIDERS.join(', ')}.`,
     );
   }
 
@@ -64,6 +65,15 @@ export function createProvider(settings: ProviderSettings): Provider {
         throw new ParallaxError(
           'No OpenAI API key found.',
           'Run `parallax login --provider openai`, or set OPENAI_API_KEY. For local servers, set a base URL: `parallax config set base-url http://localhost:11434/v1`.',
+        );
+      }
+      return createOpenAIProvider({ apiKey, model, baseUrl });
+
+    case 'openrouter':
+      if (!apiKey) {
+        throw new ParallaxError(
+          'No OpenRouter API key found.',
+          'Run `parallax login --provider openrouter`, or set OPENROUTER_API_KEY.',
         );
       }
       return createOpenAIProvider({ apiKey, model, baseUrl });

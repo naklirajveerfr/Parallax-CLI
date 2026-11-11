@@ -28,7 +28,7 @@ $ parallax
 
 ## Install
 
-Requires Node 20+.
+Requires Node 22+.
 
 From npm (after publishing):
 

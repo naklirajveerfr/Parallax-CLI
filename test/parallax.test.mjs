@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { parseArgs } from '../dist/cli/args.js';
 import { defaultConfig, resolveBaseUrl, resolveModel } from '../dist/config.js';
@@ -223,4 +225,31 @@ test('agent loop executes tools and returns a final answer', async () => {
   const last = result.messages.at(-1);
   assert.equal(last.role, 'assistant');
   assert.match(JSON.stringify(last.content), /list_files/);
+});
+
+test('a closed stdout (EPIPE) exits quietly instead of crashing', async () => {
+  const entry = fileURLToPath(new URL('../dist/index.js', import.meta.url));
+  const child = spawn(process.execPath, [entry, 'providers'], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  let stderr = '';
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  // Emulate `parallax providers | head -1`: read a little, then close the pipe.
+  await new Promise((resolve) => {
+    child.stdout.once('data', () => {
+      child.stdout.destroy();
+      resolve();
+    });
+    child.once('close', resolve);
+  });
+
+  const code = await new Promise((resolve) => {
+    if (child.exitCode !== null) resolve(child.exitCode);
+    else child.once('close', resolve);
+  });
+
+  assert.equal(code, 0, `exit code ${code}, stderr: ${stderr}`);
+  assert.doesNotMatch(stderr, /EPIPE/);
 });

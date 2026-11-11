@@ -1,6 +1,6 @@
 {
   "name": "parallaxcli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ParallaxCLI - an open terminal coding agent",
   "repository": {
     "type": "git",

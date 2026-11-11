@@ -83,6 +83,29 @@ export function isProvider(value: string): value is ProviderId {
   return getPreset(value) !== undefined;
 }
 
+/**
+ * Cheap readiness check used before a turn starts. It only reports problems we
+ * can fix by asking for a key; cloud credential errors surface on first use.
+ */
+export function providerAuthProblem(settings: {
+  provider: string;
+  apiKey?: string;
+  baseUrl?: string;
+}): string | null {
+  const preset = getPreset(settings.provider);
+  if (!preset) return `Unknown provider "${settings.provider}".`;
+  if (preset.kind === 'unsupported') return `${preset.label} is not supported yet.`;
+  for (const key of preset.requiredEnv ?? []) {
+    if (!process.env[key]) return `Missing environment variable ${key} for ${preset.label}.`;
+  }
+  if (preset.kind === 'mock' || preset.auth === 'none') return null;
+  if (preset.kind === 'azure' || preset.kind === 'vertex') return null;
+  if (settings.apiKey) return null;
+  // A custom OpenAI-compatible endpoint (proxy, gateway, local server) may not need a key.
+  if (preset.id === 'openai' && settings.baseUrl) return null;
+  return `No ${preset.label} API key found.`;
+}
+
 export function resolveModel(config: ParallaxConfig, provider: ProviderId): string {
   return config.models[provider] ?? getPreset(provider)?.defaultModel ?? '';
 }

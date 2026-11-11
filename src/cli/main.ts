@@ -1,11 +1,11 @@
 import { stat } from 'node:fs/promises';
 import { runTurn } from '../agent/agent.js';
 import { buildSystemPrompt } from '../agent/prompt.js';
-import { loadConfig, type ParallaxConfig } from '../config.js';
-import { createProvider, resolveProviderSettings } from '../providers/index.js';
+import { configPath, loadConfig, providerAuthProblem, saveConfig, type ParallaxConfig } from '../config.js';
+import { canLogin, createProvider, getPreset, resolveProviderSettings, type ProviderSettings } from '../providers/index.js';
 import { userText } from '../providers/types.js';
 import { Approvals } from '../tools/index.js';
-import { promptLine } from '../ui/input.js';
+import { promptLine, promptSecret } from '../ui/input.js';
 import { Renderer } from '../ui/render.js';
 import { c } from '../util/colors.js';
 import { ParallaxError, describeError } from '../util/errors.js';
@@ -116,7 +116,6 @@ async function runChat(options: CliOptions, config: ParallaxConfig): Promise<voi
   }
 
   const settings = resolveProviderSettings(config, options);
-  const provider = createProvider(settings);
   const system = buildSystemPrompt({
     cwd: options.cwd,
     platform: `${process.platform} ${process.arch}`,
@@ -126,6 +125,7 @@ async function runChat(options: CliOptions, config: ParallaxConfig): Promise<voi
   });
 
   if (options.prompt !== undefined && options.prompt.trim() !== '') {
+    const provider = await ensureProviderForOneShot(config, settings);
     await runOnce(options, provider, system);
     return;
   }
@@ -133,7 +133,6 @@ async function runChat(options: CliOptions, config: ParallaxConfig): Promise<voi
   await runRepl({
     config,
     settings,
-    provider,
     system,
     cwd: options.cwd,
     allowOutside: options.allowOutside,
@@ -141,6 +140,42 @@ async function runChat(options: CliOptions, config: ParallaxConfig): Promise<voi
     maxSteps: options.maxSteps,
     maxTokens: options.maxTokens,
   });
+}
+
+/**
+ * One-shot runs fail fast in scripts, but an interactive terminal gets a chance
+ * to paste the missing key instead of losing the prompt.
+ */
+async function ensureProviderForOneShot(
+  config: ParallaxConfig,
+  settings: ProviderSettings,
+): Promise<ReturnType<typeof createProvider>> {
+  const problem = providerAuthProblem(settings);
+  const preset = getPreset(settings.provider);
+
+  if (
+    problem &&
+    preset &&
+    canLogin(preset) &&
+    process.stdin.isTTY &&
+    !problem.startsWith('Missing environment variable')
+  ) {
+    const label = preset.id === 'copilot' ? 'GitHub token' : 'API key';
+    const env = preset.envKeys[0];
+    process.stdout.write(`${c.yellow('!')} ${problem}\n`);
+    process.stdout.write(
+      `${c.dim(`  Paste it to store it in ${configPath()}${env ? `, or set ${env}` : ''}`)}\n`,
+    );
+    const key = await promptSecret(`  ${c.border('┃')} ${c.accent('›')} `);
+    if (key) {
+      config.apiKeys[preset.id] = key;
+      await saveConfig(config);
+      process.stdout.write(`${c.green('✓')} Saved ${label} for ${preset.label}.\n`);
+      settings.apiKey = key;
+    }
+  }
+
+  return createProvider(settings);
 }
 
 async function runOnce(

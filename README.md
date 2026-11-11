@@ -9,24 +9,34 @@ A terminal coding agent — bring your own API key. ParallaxCLI reads your code,
 
 ```
 $ parallax
-  ParallaxCLI v0.2.1
-  anthropic · claude-sonnet-5-5 · ~/Lab/myproject
-  /help for commands, /exit to quit
 
-› add a health check endpoint to the server
+  ╭──────────────────────────────────────────────╮
+  │ ◆ parallax                            v0.3.0 │
+  │ terminal coding agent                        │
+  ╰──────────────────────────────────────────────╯
+  model     claude-sonnet-5-5 (anthropic)
+  workspace ~/Lab/myproject
+  auth      no key · send a message and I’ll ask
+  /help commands · /exit quit · ctrl+c cancel
 
-⏺ read_file src/server.ts
-⎿  src/server.ts (84 lines)
-   1| import express from 'express';
-   …
+┃ › add a health check endpoint to the server
 
-⏺ edit_file src/server.ts
-⚠ Edit src/server.ts
-    - app.listen(port)
-    + app.get('/health', (_req, res) => res.json({ ok: true }))
-    + app.listen(port)
-  Allow? [y]es / [n]o / [a]lways: y
-⎿  Edited src/server.ts
+  ┃ Anthropic needs an API key.
+  ┃ Paste it below to store it in ~/.config/parallax/config.json.
+  ┃ › ********
+
+  ┃ I'll look at the server first.
+
+  ┃ ╭─ read_file src/server.ts
+  ┃ │ import express from 'express';
+  ┃ │ …
+  ┃ ╰─ done · 42ms
+
+  ┃ ╭─ edit_file src/server.ts
+  ┃ │ Edited src/server.ts
+  ┃ ╰─ done · 12ms
+  ┃ Added the `/health` route.
+  ┃ 8.4k in · 412 out · 3.1s
 ```
 
 ## Install
@@ -70,10 +80,12 @@ node dist/index.js --help
 ## Quick start
 
 ```bash
-parallax login                       # paste an API key (hidden input)
 parallax                             # start an interactive session
+parallax login                       # or store a key up front (hidden input)
 parallax -p "explain this repo"      # one-shot, for scripts
 ```
+
+You do not need a key to start. The session opens normally and shows `no key`; the first message you send asks for one, saves it, and continues with that same message. `/login` replaces the key later. Non-interactive runs (piped input, CI) fail fast with the `parallax login` command instead of hanging on a prompt.
 
 Keys are stored in `~/.config/parallax/config.json` with `0600` permissions. Environment variables take precedence, so `PARALLAX_API_KEY` or any provider-specific key (`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, …) works without stored config. `parallax providers` shows the variable for each provider.
 
@@ -146,6 +158,7 @@ Options: `--provider`, `--model`, `--base-url`, `--api-key`, `--cwd`, `--yes`, `
 | `/clear` | Forget the conversation |
 | `/model [name]` | Show or switch the model |
 | `/provider [name]` | Show or switch provider |
+| `/login` | Store or replace the API key |
 | `/tools` | List tools |
 | `/config` | Show saved config |
 | `/providers` | List providers and auth |

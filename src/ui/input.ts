@@ -1,4 +1,4 @@
-import { createInterface } from 'node:readline';
+import { createInterface, type Interface } from 'node:readline';
 
 /** Read one line from stdin without echoing (for API keys). */
 export async function promptSecret(question: string): Promise<string> {
@@ -68,5 +68,25 @@ export async function promptLine(question: string): Promise<string> {
     return await new Promise<string>((resolve) => rl.question(question, resolve));
   } finally {
     rl.close();
+  }
+}
+
+/**
+ * Read a hidden value while a readline interface is open. readline's own input
+ * listener would echo and interpret every keystroke, so detach it for the
+ * duration of the prompt and put it back afterwards.
+ */
+export async function promptSecretDuring(rl: Interface, question: string): Promise<string> {
+  const input = process.stdin;
+  if (!input.isTTY) return promptSecret(question);
+
+  const listeners = input.listeners('data') as Array<(chunk: Buffer) => void>;
+  rl.pause();
+  for (const listener of listeners) input.removeListener('data', listener);
+  try {
+    return await promptSecret(question);
+  } finally {
+    for (const listener of listeners) input.on('data', listener);
+    rl.resume();
   }
 }

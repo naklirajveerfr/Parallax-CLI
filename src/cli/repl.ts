@@ -5,29 +5,37 @@ import { createInterface } from 'node:readline';
 import { runTurn } from '../agent/agent.js';
 import { buildSystemPrompt } from '../agent/prompt.js';
 import {
+  apiKeySource,
   configDir,
+  configPath,
   isProvider,
   PROVIDER_LABELS,
+  providerAuthProblem,
   resolveApiKey,
-  resolveModel,
   saveConfig,
   type ParallaxConfig,
 } from '../config.js';
-import { createProvider, resolveProviderSettings, type ProviderSettings } from '../providers/index.js';
+import {
+  canLogin,
+  createProvider,
+  getPreset,
+  resolveProviderSettings,
+  type ProviderSettings,
+} from '../providers/index.js';
 import type { Message, Provider } from '../providers/types.js';
 import { userText } from '../providers/types.js';
 import { Approvals, tools } from '../tools/index.js';
 import { showConfig } from './config-cmd.js';
 import { runProvidersCommand } from './providers-cmd.js';
 import { Renderer } from '../ui/render.js';
+import { promptSecretDuring } from '../ui/input.js';
 import { c } from '../util/colors.js';
-import { describeError } from '../util/errors.js';
+import { describeError, ParallaxError } from '../util/errors.js';
 import { VERSION } from '../version.js';
 
 export interface ReplOptions {
   config: ParallaxConfig;
   settings: ProviderSettings;
-  provider: Provider;
   system: string;
   cwd: string;
   allowOutside: boolean;
@@ -43,6 +51,7 @@ const HELP = `Commands
   /model [name]      show or switch the model
   /provider [name]   show or switch provider (see /providers)
   /providers         list all providers and their auth
+  /login             store an API key for the current provider
   /config            show saved configuration
   /tools             list available tools
   /cost              show session token usage
@@ -79,11 +88,19 @@ function shortenHome(path: string): string {
   return path === home ? '~' : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
 }
 
+function promptMark(): string {
+  return `${c.border('┃')} ${c.accent('›')} `;
+}
+
+function continuationMark(): string {
+  return `${c.border('┃')} ${c.muted('·')} `;
+}
+
 export async function runRepl(options: ReplOptions): Promise<void> {
   const render = new Renderer();
   let config = options.config;
   let settings = options.settings;
-  let provider = options.provider;
+  let provider: Provider | null = null;
   let system = options.system;
   let messages: Message[] = [];
   const totals = { inputTokens: 0, outputTokens: 0 };
@@ -122,8 +139,14 @@ export async function runRepl(options: ReplOptions): Promise<void> {
   });
 
   const prompt = (continuation = false) => {
-    rl.setPrompt(continuation ? c.dim('… ') : c.bold(c.cyan('› ')));
+    if (!rl.terminal) return;
+    rl.setPrompt(continuation ? continuationMark() : promptMark());
     rl.prompt();
+  };
+
+  const promptAfterTurn = () => {
+    if (rl.terminal) process.stdout.write('\n');
+    prompt();
   };
 
   const rebuildSystem = () => {
@@ -136,21 +159,97 @@ export async function runRepl(options: ReplOptions): Promise<void> {
     });
   };
 
+  const authState = (): string => {
+    const preset = getPreset(settings.provider);
+    if (!preset) return c.yellow('unknown provider');
+    if (preset.kind === 'mock' || preset.auth === 'none') return c.muted('not required');
+    if (preset.kind === 'azure' || preset.kind === 'vertex') return c.muted('cloud credentials');
+    const key = settings.apiKey;
+    if (key) return `${c.success('key set')} ${c.muted(`(${apiKeySource(settings.provider)})`)}`;
+    return `${c.yellow('no key')} ${c.muted('· send a message and I’ll ask')}`;
+  };
+
+  /** Ask for a key, store it, and return it. Returns null when nothing was entered. */
+  const captureKey = async (): Promise<string | null> => {
+    const preset = getPreset(settings.provider);
+    if (!preset) return null;
+    if (preset.kind === 'mock' || preset.auth === 'none') {
+      render.info(`${preset.label} needs no key.`);
+      return null;
+    }
+    if (!canLogin(preset)) {
+      render.warn(`${preset.label} uses cloud credentials, not an API key.`);
+      if (preset.notes) render.info(`  ${preset.notes}`);
+      return null;
+    }
+
+    const label = preset.id === 'copilot' ? 'GitHub token' : 'API key';
+    const env = preset.envKeys[0];
+    render.note(
+      `${preset.label} needs an ${label}.`,
+      `Paste it below to store it in ${configPath()}${env ? `, or set ${env}` : ''}.`,
+    );
+
+    const key = await promptSecretDuring(rl, `  ${promptMark()}`);
+    if (!key) {
+      render.warn(`No ${label.toLowerCase()} entered.`);
+      return null;
+    }
+    config.apiKeys[preset.id] = key;
+    await saveConfig(config);
+    settings = { ...settings, apiKey: key };
+    provider = null;
+    render.info(`Saved ${label} for ${preset.label}.`);
+    return key;
+  };
+
+  /** Build the provider on demand so startup works without credentials. */
+  const ensureProvider = async (): Promise<Provider> => {
+    if (provider) return provider;
+
+    // Pick up keys saved or exported since startup.
+    settings = { ...settings, apiKey: settings.apiKey ?? resolveApiKey(config, settings.provider) };
+
+    const problem = providerAuthProblem(settings);
+    if (problem) {
+      const preset = getPreset(settings.provider);
+      if (!preset) throw new ParallaxError(problem, 'Run /providers to see the list.');
+      if (preset.kind === 'unsupported') {
+        throw new ParallaxError(problem, preset.notes ?? 'Run /providers to see supported providers.');
+      }
+      // Missing account/gateway env vars cannot be fixed by pasting a key.
+      if (problem.startsWith('Missing environment variable')) {
+        throw new ParallaxError(problem, preset.notes ?? 'Set it and try again.');
+      }
+      if (!process.stdin.isTTY) {
+        throw new ParallaxError(
+          problem,
+          `Run \`parallax login --provider ${preset.id}\`${preset.envKeys[0] ? ` or set ${preset.envKeys[0]}` : ''} first.`,
+        );
+      }
+      if (!canLogin(preset)) throw new ParallaxError(problem, preset.notes);
+      const key = await captureKey();
+      if (!key) throw new ParallaxError(problem, 'Send another message to try again.');
+    }
+
+    provider = createProvider(settings);
+    return provider;
+  };
+
   const switchProvider = async (name: string): Promise<void> => {
     if (!isProvider(name)) {
       render.warn(`Unknown provider "${name}". Run /providers for the list.`);
       return;
     }
     try {
-      const next = resolveProviderSettings(config, { provider: name });
-      const created = createProvider(next);
-      provider = created;
-      settings = next;
+      settings = resolveProviderSettings(config, { provider: name });
+      provider = null;
       config.provider = name;
       config = { ...config };
       await saveConfig(config);
       rebuildSystem();
       render.info(`Provider: ${PROVIDER_LABELS[settings.provider]} · ${settings.model}`);
+      if (providerAuthProblem(settings)) render.info('  No key yet; you’ll be asked when you send a message.');
     } catch (error) {
       const described = describeError(error);
       render.error(described.message, described.hint);
@@ -159,10 +258,8 @@ export async function runRepl(options: ReplOptions): Promise<void> {
 
   const switchModel = async (name: string): Promise<void> => {
     try {
-      const next = { ...settings, model: name };
-      const created = createProvider(next);
-      provider = created;
-      settings = next;
+      settings = { ...settings, model: name };
+      provider = null;
       config.models[settings.provider] = name;
       await saveConfig(config);
       rebuildSystem();
@@ -180,7 +277,7 @@ export async function runRepl(options: ReplOptions): Promise<void> {
     switch (command) {
       case 'help':
       case '?':
-        process.stdout.write(`${HELP}\n`);
+        process.stdout.write(`\n${HELP}\n\n`);
         return 'continue';
       case 'exit':
       case 'quit':
@@ -190,13 +287,19 @@ export async function runRepl(options: ReplOptions): Promise<void> {
         messages = [];
         render.info('Conversation cleared.');
         return 'continue';
+      case 'login':
+        await captureKey();
+        rebuildSystem();
+        return 'continue';
       case 'model':
         if (argument) await switchModel(argument);
-        else process.stdout.write(`  model: ${c.bold(settings.model)} ${c.dim(`(${settings.provider})`)}\n`);
+        else process.stdout.write(`${PADLINE}model: ${c.bold(settings.model)} ${c.muted(`(${settings.provider})`)}\n`);
         return 'continue';
       case 'provider': {
         if (!argument) {
-          process.stdout.write(`  provider: ${c.bold(settings.provider)} ${c.dim(`(${PROVIDER_LABELS[settings.provider]})`)}\n`);
+          process.stdout.write(
+            `${PADLINE}provider: ${c.bold(settings.provider)} ${c.muted(`(${PROVIDER_LABELS[settings.provider]})`)}\n`,
+          );
           return 'continue';
         }
         await switchProvider(argument);
@@ -209,11 +312,13 @@ export async function runRepl(options: ReplOptions): Promise<void> {
         await showConfig(config);
         return 'continue';
       case 'tools':
-        for (const tool of tools) process.stdout.write(`  ${c.bold(tool.spec.name.padEnd(12))} ${c.dim(tool.spec.description.split('.')[0] ?? '')}\n`);
+        for (const tool of tools) {
+          process.stdout.write(`  ${c.bold(tool.spec.name.padEnd(12))} ${c.muted(tool.spec.description.split('.')[0] ?? '')}\n`);
+        }
         return 'continue';
       case 'cost':
         process.stdout.write(
-          `  session: ${c.bold(String(totals.inputTokens))} input tokens · ${c.bold(String(totals.outputTokens))} output tokens\n`,
+          `${PADLINE}session: ${c.bold(String(totals.inputTokens))} input tokens · ${c.bold(String(totals.outputTokens))} output tokens\n`,
         );
         return 'continue';
       default:
@@ -223,12 +328,22 @@ export async function runRepl(options: ReplOptions): Promise<void> {
   };
 
   const handleTurn = async (text: string): Promise<void> => {
+    if (rl.terminal) process.stdout.write('\n');
+    let active: Provider;
+    try {
+      active = await ensureProvider();
+    } catch (error) {
+      const described = describeError(error);
+      render.error(described.message, described.hint);
+      return;
+    }
+
     messages.push(userText(text));
     abortController = new AbortController();
 
     try {
       const result = await runTurn({
-        provider,
+        provider: active,
         system,
         messages,
         render,
@@ -254,11 +369,13 @@ export async function runRepl(options: ReplOptions): Promise<void> {
     }
   };
 
-  process.stdout.write(`\n${c.bold('ParallaxCLI')} ${c.dim(`v${VERSION}`)}\n`);
-  process.stdout.write(
-    `  ${c.cyan(settings.provider)} ${c.dim('·')} ${c.bold(settings.model)} ${c.dim('·')} ${c.dim(shortenHome(options.cwd))}\n`,
-  );
-  process.stdout.write(`  ${c.dim('/help for commands, /exit to quit')}\n\n`);
+  render.banner({
+    version: VERSION,
+    provider: settings.provider,
+    model: settings.model,
+    cwd: shortenHome(options.cwd),
+    auth: authState(),
+  });
 
   prompt();
 
@@ -274,7 +391,7 @@ export async function runRepl(options: ReplOptions): Promise<void> {
       const full = continuation;
       continuation = '';
       await handleTurn(full);
-      prompt();
+      promptAfterTurn();
       continue;
     }
 
@@ -298,7 +415,7 @@ export async function runRepl(options: ReplOptions): Promise<void> {
     }
 
     await handleTurn(trimmed);
-    prompt();
+    promptAfterTurn();
   }
 
   rl.close();
@@ -309,8 +426,10 @@ export async function runRepl(options: ReplOptions): Promise<void> {
 
   if (totals.inputTokens > 0 || totals.outputTokens > 0) {
     process.stdout.write(
-      c.dim(`\nSession: ${totals.inputTokens} input tokens · ${totals.outputTokens} output tokens\n`),
+      c.muted(`\n  session: ${totals.inputTokens} input tokens · ${totals.outputTokens} output tokens\n`),
     );
   }
-  process.stdout.write(c.dim('Goodbye.\n'));
+  process.stdout.write(c.muted('  bye\n'));
 }
+
+const PADLINE = '  ';

@@ -4,8 +4,7 @@ import {
   resolveModel,
   isProvider,
   type ParallaxConfig,
-} from '../config.js';
-import { ParallaxError } from '../util/errors.js';
+} from '../config.js';import { ParallaxError } from '../util/errors.js';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAzureProvider } from './azure.js';
 import { createCopilotProvider } from './copilot.js';
@@ -16,7 +15,7 @@ import type { Provider } from './types.js';
 import { createVertexProvider } from './vertex.js';
 
 export * from './types.js';
-export { PRESETS, getPreset } from './registry.js';
+export { PRESETS, getPreset, isAvailable, canLogin } from './registry.js';
 export type { ProviderPreset } from './registry.js';
 
 export interface ProviderSettings {

@@ -19,7 +19,17 @@ export const c = {
   cyan: wrap('36', '39'),
   gray: wrap('90', '39'),
   bgRed: wrap('41', '49'),
+  // 256-color palette for the chat UI. Borders stay quiet, the accent marks
+  // the parts you interact with (prompt, tool names, headings).
+  border: wrap('38;5;240', '39'),
+  muted: wrap('38;5;245', '39'),
+  accent: wrap('38;5;110', '39'),
+  accentDim: wrap('38;5;67', '39'),
+  success: wrap('38;5;114', '39'),
+  danger: wrap('38;5;204', '39'),
+  panel: wrap('48;5;236', '49'),
 };
+
 
 /** Visible length of a string, ignoring ANSI escape sequences. */
 export function width(text: string): number {

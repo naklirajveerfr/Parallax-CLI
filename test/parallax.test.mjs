@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { parseArgs } from '../dist/cli/args.js';
-import { defaultConfig, resolveBaseUrl, resolveModel } from '../dist/config.js';
+import { defaultConfig, providerAuthProblem, resolveBaseUrl, resolveModel } from '../dist/config.js';
 import { createProvider, interpolateBaseUrl, PRESETS, resolveProviderSettings } from '../dist/providers/index.js';
 import { MockProvider } from '../dist/providers/mock.js';
 import { runTurn } from '../dist/agent/agent.js';
@@ -252,4 +252,58 @@ test('a closed stdout (EPIPE) exits quietly instead of crashing', async () => {
 
   assert.equal(code, 0, `exit code ${code}, stderr: ${stderr}`);
   assert.doesNotMatch(stderr, /EPIPE/);
+});
+
+test('missing credentials are detected before a turn starts', () => {
+  const config = defaultConfig();
+
+  const anthropic = resolveProviderSettings(config, { provider: 'anthropic', apiKey: '' });
+  assert.match(providerAuthProblem(anthropic), /Anthropic API key/);
+  assert.equal(providerAuthProblem({ ...anthropic, apiKey: 'sk-test' }), null);
+
+  // Providers that need no key, or that use cloud credentials.
+  for (const provider of ['mock', 'ollama', 'azure', 'vertex']) {
+    assert.equal(providerAuthProblem(resolveProviderSettings(config, { provider })), null, provider);
+  }
+
+  // A custom OpenAI-compatible endpoint may be keyless (local servers, proxies).
+  const proxy = resolveProviderSettings(config, {
+    provider: 'openai',
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    apiKey: '',
+  });
+  assert.equal(providerAuthProblem(proxy), null);
+});
+
+test('the session starts without a key and asks only when a message is sent', async () => {
+  const entry = fileURLToPath(new URL('../dist/index.js', import.meta.url));
+  const configHome = await mkdtemp(join(tmpdir(), 'parallax-nokey-'));
+  const env = { ...process.env, XDG_CONFIG_HOME: configHome, NO_COLOR: '1' };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.PARALLAX_API_KEY;
+
+  const run = async (input) => {
+    const child = spawn(process.execPath, [entry], { env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.stdin.end(input);
+    const code = await new Promise((resolve) => child.on('close', resolve));
+    return { code, stdout, stderr };
+  };
+
+  const start = await run('/exit\n');
+  assert.equal(start.code, 0, start.stderr);
+  assert.match(start.stdout, /parallax/);
+  assert.match(start.stdout, /no key/);
+  assert.doesNotMatch(start.stdout, /No Anthropic API key found/);
+
+  const send = await run('hello\n/exit\n');
+  assert.equal(send.code, 0, send.stderr);
+  assert.match(send.stdout + send.stderr, /No Anthropic API key found/);
 });
